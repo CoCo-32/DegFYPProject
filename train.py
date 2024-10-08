@@ -5,28 +5,13 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torch.utils.data import DataLoader
 from torchvision.transforms import functional as F
 import matplotlib.pyplot as plt
-from custom_dataset import CustomObjectDetectionDataset
+from dataset import ObjectDetectionDataset
 
 def load_model(num_classes):
     model = fasterrcnn_resnet50_fpn(pretrained=True)
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
     return model
-
-def train_one_epoch(model, optimizer, data_loader, device):
-    model.train()
-    for images, targets in data_loader:
-        images = list(image.to(device) for image in images)
-        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-
-        loss_dict = model(images, targets)
-        losses = sum(loss for loss in loss_dict.values())
-
-        optimizer.zero_grad()
-        losses.backward()
-        optimizer.step()
-
-    print(f"Loss: {losses.item()}")
 
 def visualize_detections(image, predictions, threshold=0.5):
     image = image.permute(1, 2, 0).cpu().numpy()
@@ -58,7 +43,7 @@ def main():
     model.to(device)
 
     # Prepare the dataset
-    dataset = CustomObjectDetectionDataset(root_dir='path/to/your/dataset')
+    dataset = ObjectDetectionDataset(txt_file='solindex.txt')
     data_loader = DataLoader(dataset, batch_size=2, shuffle=True, collate_fn=lambda x: tuple(zip(*x)))
 
     # Set up the optimizer
@@ -69,7 +54,23 @@ def main():
     num_epochs = 10
     for epoch in range(num_epochs):
         print(f"Epoch {epoch+1}/{num_epochs}")
-        train_one_epoch(model, optimizer, data_loader, device)
+        model.train()
+        for images, targets in data_loader:
+            images = list(image.to(device) for image in images)
+            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+
+            loss_dict = model(images, targets)
+            losses = sum(loss for loss in loss_dict.values())
+
+            # Print losses to debug
+            print(f"Loss dict: {loss_dict}")
+            print(f"Total loss: {losses.item()}")
+
+            optimizer.zero_grad()
+            losses.backward()
+            optimizer.step()
+
+    print(f"Loss: {losses.item()}")
 
     # Save the model
     torch.save(model.state_dict(), 'faster_rcnn_custom_model.pth')
