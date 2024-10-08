@@ -3,6 +3,8 @@ import json
 import torch
 import numpy as np
 from PIL import Image
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 from torch.utils.data import Dataset
 from torchvision.transforms import ToTensor
 
@@ -41,7 +43,7 @@ class ObjectDetectionDataset(Dataset):
         
         # Resize image
         original_size = image.size  # Save the original size for scaling annotations
-        image = image.resize(self.image_size)
+        image = image.resize(self.image_size, Image.BILINEAR)
 
         # Load annotations
         with open(ann_path, 'r') as f:
@@ -89,5 +91,4 @@ class ObjectDetectionDataset(Dataset):
             image = self.transform(image)
 
         return image, target
-    
-    
+        

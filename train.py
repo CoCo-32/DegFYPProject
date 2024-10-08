@@ -43,7 +43,7 @@ def main():
     model.to(device)
 
     # Prepare the dataset
-    dataset = ObjectDetectionDataset(txt_file='solindex.txt')
+    dataset = ObjectDetectionDataset(txt_file='solindex.txt', image_size=(640, 360))
     data_loader = DataLoader(dataset, batch_size=2, shuffle=True, collate_fn=lambda x: tuple(zip(*x)))
 
     # Set up the optimizer
