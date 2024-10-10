@@ -9,9 +9,10 @@ import torchvision.transforms as T
 from torchvision.transforms import ToTensor
 
 class CustomDataset(Dataset):
-    def __init__(self, txt_file, transforms=None):
+    def __init__(self, txt_file, transforms=None, target_size=(512, 512)):
         self.txt_file = txt_file
         self.transforms = transforms
+        self.target_size = target_size  # New attribute for target size
         with open(txt_file, 'r') as file:
             lines = file.readlines()
         self.images = []
@@ -37,24 +38,29 @@ class CustomDataset(Dataset):
         # Load annotations from JSON file
         with open(ann_path) as f:
             annotations = json.load(f)
+        
+        # Resize image
+        image = img.resize(self.target_size)
 
         # Extract polygons and convert to masks and bounding boxes
         masks = []
         boxes = []
         for obj in annotations['shapes']:
             points = np.array(obj['points'])
+            # Resize points to match the new image size
+            points = points * np.array([self.target_size[0] / 2560, self.target_size[1] / 1440])
             xmin, ymin = np.min(points, axis=0)
             xmax, ymax = np.max(points, axis=0)
             boxes.append([xmin, ymin, xmax, ymax])
             
             # Create a binary mask for each polygon
-            mask = Image.new('L', img.size, 0)
+            mask = Image.new('L', image.size, 0)
             draw = ImageDraw.Draw(mask)  # Create a drawing object
             draw.polygon(points.flatten().tolist(), outline=1, fill=1)
-            mask = np.array(mask)
-            masks.append(mask)
+            masks.append(np.array(mask))
 
         # Convert data to PyTorch tensors
+        masks = np.array(masks)
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
         masks = torch.as_tensor(masks, dtype=torch.uint8)
         labels = torch.ones((len(masks),), dtype=torch.int64)  # For simplicity, we assume all objects are of the same class.
@@ -65,10 +71,10 @@ class CustomDataset(Dataset):
             'masks': masks
         }
 
-        if self.transform is None:
+        if self.transforms is None:
             image = ToTensor()(image)
         else:
-            image = self.transform(image)
+            image = self.transforms(image)
 
         return image, target
     

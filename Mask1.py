@@ -12,7 +12,7 @@ from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.transforms import transforms as T
 from PIL import Image
-from MaskDataset import CustomDataset
+from MaskDataset1 import CustomDataset
 
 def get_model(num_classes):
     # Load a pre-trained Mask R-CNN model
@@ -38,6 +38,7 @@ def main():
 
     # Define transforms to convert images to PyTorch tensors
     transforms = T.Compose([T.ToTensor()])
+
 
     # Set up the dataset and dataloader
     dataset = CustomDataset(txt_file='solindex.txt', transforms=transforms)

@@ -3,7 +3,6 @@ import torch
 import numpy as np
 from PIL import Image, ImageDraw
 import json
-import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
 import torchvision.transforms as T
 from torchvision.transforms import ToTensor
@@ -32,7 +31,7 @@ class CustomDataset(Dataset):
         ann_path = self.annotations[idx]
 
         # Load image
-        img = Image.open(img_path).convert("RGB")
+        image = Image.open(img_path).convert("RGB")
 
         # Load annotations from JSON file
         with open(ann_path) as f:
@@ -48,7 +47,7 @@ class CustomDataset(Dataset):
             boxes.append([xmin, ymin, xmax, ymax])
             
             # Create a binary mask for each polygon
-            mask = Image.new('L', img.size, 0)
+            mask = Image.new('L', image.size, 0)
             draw = ImageDraw.Draw(mask)  # Create a drawing object
             draw.polygon(points.flatten().tolist(), outline=1, fill=1)
             mask = np.array(mask)
@@ -65,14 +64,12 @@ class CustomDataset(Dataset):
             'masks': masks
         }
 
-        if self.transform is None:
+        if self.transforms is None:
             image = ToTensor()(image)
         else:
-            image = self.transform(image)
+            image = self.transforms(image)
 
         return image, target
-    
-
 
 # Define transforms
 transforms = T.Compose([T.ToTensor()])
