@@ -7,10 +7,10 @@ from torch.utils.data import Dataset
 from torchvision.transforms import ToTensor
 
 class ObjectDetectionDataset(Dataset):
-    def __init__(self, txt_file, image_size=(640, 360), transform=None):
+    def __init__(self, txt_file,  transform=None):
         self.txt_file = txt_file
         self.transform = transform
-        self.image_size = image_size
+        #self.image_size = image_size
         with open(txt_file, 'r') as file:
             lines = file.readlines()
         self.images = []
@@ -40,8 +40,8 @@ class ObjectDetectionDataset(Dataset):
         image = Image.open(img_path).convert("RGB")
         
         # Resize image
-        original_size = image.size  # Save the original size for scaling annotations
-        image = image.resize(self.image_size)
+        #original_size = image.size  # Save the original size for scaling annotations
+        #image = image.resize(self.image_size)
 
         # Load annotations
         with open(ann_path, 'r') as f:
@@ -56,10 +56,10 @@ class ObjectDetectionDataset(Dataset):
             polygon = np.array(points, dtype=np.float32)  # Convert to NumPy array for OpenCV
             
             # Resize bounding box to match the new image size
-            scale_x = self.image_size[0] / original_size[0]
-            scale_y = self.image_size[1] / original_size[1]
-            polygon[:, 0] *= scale_x
-            polygon[:, 1] *= scale_y
+            #scale_x = self.image_size[0] / original_size[0]
+            #scale_y = self.image_size[1] / original_size[1]
+            #polygon[:, 0] *= scale_x
+            #polygon[:, 1] *= scale_y
 
             # Convert polygon to a bounding box (for Faster R-CNN)
             x_min = np.min(polygon[:, 0])

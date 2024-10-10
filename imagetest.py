@@ -4,15 +4,14 @@ import torch
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 from torch.utils.data import Dataset
 from torchvision.transforms import ToTensor
 
 class ObjectDetectionDataset(Dataset):
-    def __init__(self, txt_file, image_size=(640, 360), transform=None):
+    def __init__(self, txt_file, image_size=(640, 360), transform=ToTensor()):
         self.txt_file = txt_file
         self.transform = transform
-        self.image_size = image_size
+        self.image_size = image_size  # New parameter for resizing
         with open(txt_file, 'r') as file:
             lines = file.readlines()
         self.images = []
@@ -40,7 +39,7 @@ class ObjectDetectionDataset(Dataset):
 
         # Load image
         image = Image.open(img_path).convert("RGB")
-        
+
         # Resize image
         original_size = image.size  # Save the original size for scaling annotations
         image = image.resize(self.image_size, Image.BILINEAR)
@@ -62,7 +61,7 @@ class ObjectDetectionDataset(Dataset):
             scale_y = self.image_size[1] / original_size[1]
             polygon[:, 0] *= scale_x
             polygon[:, 1] *= scale_y
-
+            
             # Convert polygon to a bounding box (for Faster R-CNN)
             x_min = np.min(polygon[:, 0])
             y_min = np.min(polygon[:, 1])
@@ -84,11 +83,25 @@ class ObjectDetectionDataset(Dataset):
         target["area"] = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
         target["iscrowd"] = torch.zeros((len(boxes),), dtype=torch.int64)
 
-        # Manually convert image to tensor using ToTensor() if transform is None
-        if self.transform is None:
-            image = ToTensor()(image)
-        else:
+        # Apply transformation if specified
+        if self.transform:
             image = self.transform(image)
 
+        # Visualize the final processed image and bounding boxes
+        self.visualize_image(image, boxes)
+
         return image, target
+
+    def visualize_image(self, image, boxes):
+        """Visualize the image with bounding boxes."""
+        image = image.permute(1, 2, 0).numpy()  # Convert from C x H x W to H x W x C
+        plt.figure(figsize=(8, 6))
+        plt.imshow(image)
         
+        for box in boxes.numpy():
+            x_min, y_min, x_max, y_max = box
+            plt.gca().add_patch(plt.Rectangle((x_min, y_min), x_max - x_min, y_max - y_min, 
+                                               fill=False, edgecolor='r', linewidth=2))
+
+        plt.axis('off')
+        plt.show()

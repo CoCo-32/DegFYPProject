@@ -43,8 +43,20 @@ def main():
     model.to(device)
 
     # Prepare the dataset
-    dataset = ObjectDetectionDataset(txt_file='solindex.txt', image_size=(640, 360))
+    dataset = ObjectDetectionDataset(txt_file='solindex.txt')
     data_loader = DataLoader(dataset, batch_size=2, shuffle=True, collate_fn=lambda x: tuple(zip(*x)))
+    
+    # Visualize a few images from the dataset
+    num_images_to_show = 5  # Set how many images you want to visualize
+    for idx, (images, targets) in enumerate(data_loader):
+        if idx >= num_images_to_show:
+            break
+        for image in images:
+            plt.imshow(image.permute(1, 2, 0).cpu().numpy())
+            plt.axis('on')
+            plt.show()  # Show each image
+        
+    #print("Finished visualizing images.")
 
     # Set up the optimizer
     params = [p for p in model.parameters() if p.requires_grad]

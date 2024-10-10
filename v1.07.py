@@ -4,7 +4,6 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 import keras,os
-from keras.models import Sequential
 import os
 import cv2
 import json
@@ -54,15 +53,38 @@ def load_image_with_annotations(image, annotations):
     #image = cv2.imread(image_path)
     #image = cv2.resize(image, (224, 224))  # Resize image for the CNN model input
 
+    masks = []
+    boxes = []
+    
     for annotation in annotations:
         label = annotation['name']
         polygon = annotation['polygon']
-        # Draw polygon
-        cv2.polylines(image, [polygon], isClosed=True, color=(0, 0, 255), thickness=3)
-        # Calculate the position to place the label
-        text_position = tuple(polygon[0][0])  # Use the first point of the polygon
+
+        # Ensure all points have both x and y coordinates
+        valid_points = [point for point in polygon if len(point) == 2]
+
+        if not valid_points:
+            print(f"Skipping invalid polygon in annotation: {label}")
+            continue  # Skip invalid polygons
+
+        # Convert valid polygon to bounding box
+        x_coords = [point[0] for point in valid_points]
+        y_coords = [point[9] for point in valid_points]
+
+        # Get the top-left and bottom-right coordinates for the bounding box
+        x_min = min(x_coords)
+        x_max = max(x_coords)
+        y_min = min(y_coords)
+        y_max = max(y_coords)
+
+        # Draw bounding box
+        cv2.rectangle(image, (x_min, y_min), (x_max, y_max), color=(0, 0, 255), thickness=3)
+
+        # Calculate the position to place the label (top-left corner of bounding box)
+        text_position = (x_min, y_min - 10)  # Slightly above the bounding box
         cv2.putText(image, label, text_position, cv2.FONT_HERSHEY_SIMPLEX, 1.8, (0, 0, 255), 4)
-    # Display the image with annotations
+
+    # Resize and display the image with annotations
     resized_image = cv2.resize(image, (512, 512))
     cv2.imshow('Image with Annotations', image)
     cv2.waitKey(0)  # Wait for a key press to close the window
