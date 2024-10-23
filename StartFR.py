@@ -12,7 +12,7 @@ class SolderDataset(Dataset):
     def __init__(self, dataset_dir, transform=None):
         self.dataset_dir = os.path.join(dataset_dir)
         self.transform = transform
-        self.class_dict = {"Blue_Marble": 1, "Non_Blue_Marble": 2}
+        self.class_dict = {"good": 1, "no_good": 2, "exc_solder": 3, "poor":4 , "spike":5}
         
         # Load annotations
         with open(os.path.join(self.dataset_dir, "labels/marbles_two_class_VGG_json_format.json"), "r") as f:
