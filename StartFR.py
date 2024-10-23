@@ -1,59 +1,189 @@
 import os
+import sys
 import json
+import datetime
 import numpy as np
-import torch
-from torch.utils.data import Dataset
-import torchvision.transforms as transforms
-from PIL import Image
-import cv2
+import skimage.draw
+
+from mrcnn.visualize import display_instances
+from mrcnn.utils import extract_bboxes
+
+from mrcnn.utils import Dataset
+from matplotlib import pyplot as plt
+
+from mrcnn.config import Config
+from mrcnn.model import MaskRCNN
 
 
-class SolderDataset(Dataset):
-    def __init__(self, dataset_dir, transform=None):
-        self.dataset_dir = os.path.join(dataset_dir)
-        self.transform = transform
-        self.class_dict = {"good": 1, "no_good": 2, "exc_solder": 3, "poor":4 , "spike":5}
-        
+from mrcnn import model as modellib, utils
+
+class SolderDataset(utils.Dataset):
+
+    def load_dataset(self, dataset_dir):
+        """Load a subset of the custom dataset.
+        dataset_dir: Root directory of the dataset.
+        subset: Subset to load: train or val
+        """
+        #These lines add two classes to the dataset: "Blue_Marble" with ID 1 and "Non_Blue_Marble" with ID 2.
+        # Add classes according to the numbe of classes required to detect
+        self.add_class("custom", 1, "good")
+        self.add_class("custom", 2, "no_good")
+        self.add_class("custom", 3, "exc_solder")
+        self.add_class("custom", 4, "poor")
+        self.add_class("custom", 5, "spike")
+
+
+        dataset_dir = 'SolDef_AI/Labeled'
+
         # Load annotations
-        with open(os.path.join(self.dataset_dir, "labels/marbles_two_class_VGG_json_format.json"), "r") as f:
-            annotations = json.load(f)
-        self.annotations = [a for a in annotations.values() if a['regions']]
+        # VGG Image Annotator (up to version 1.6) saves each image in the form:
+        # { 'filename': '28503151_5b5b7ec140_b.jpg',
+        #   'regions': {
+        #       '0': {
+        #           'region_attributes': {},
+        #           'shape_attributes': {
+        #               'all_points_x': [...],
+        #               'all_points_y': [...],
+        #               'name': 'polygon'}},
+        #       ... more regions ...
+        #   },
+        #   'size': 100202
+        # }
+        # We mostly care about the x and y coordinates of each region
+        # Note: In VIA 2.0, regions was changed from a dict to a list.
+        #These lines load the annotations from a JSON file, convert them to a list, and filter out any annotations without regions.
+        extracted_data = []
+        for filename in os.listdir(dataset_dir):
+            if filename.endswith('.json'):  # Process only JSON files
+                file_path = os.path.join(dataset_dir, filename)
 
-    def __len__(self):
-        return len(self.annotations)
+                # Load the JSON data from the file
+                with open(file_path, 'r') as file:
+                    data = json.load(file)
 
-    def __getitem__(self, idx):
-        ann = self.annotations[idx]
-        img_path = os.path.join(self.dataset_dir, ann['filename'])
-        image = Image.open(img_path).convert("RGB")
+                    # Extracting components
+                    image_path = data['imagePath']
+                    shapes = data['shapes']
+
+                    class_id=[]
+                    # Loop through each shape to extract details
+                    for shape in shapes:
+                        label = shape['label']
+                        try:
+                            if label =='good':
+                                class_id.append(1)
+                            elif label =='no_good':
+                                class_id.append(2)
+                            elif label =='exc_solder':
+                                class_id.append(3)
+                            elif label =='poor':
+                                class_id.append(4)
+                            elif label =='spike':
+                                class_id.append(5)
+                        except:
+                            pass
+                        points = shape['points']
+                        shape_type = shape['shape_type']
+                        
+                        self.add_image(
+                        "custom",
+                        image_id=filename,  # use file name as a unique image id
+                        path=image_path,
+                        shape_type=shape_type,
+                        #width=width, height=height,
+                        points=points,
+                        class_id=class_id)
+
+                        print(self.add_image)
+
+
         
-        # Create mask
-        mask = np.zeros((image.size[1], image.size[0]), dtype=np.uint8)
-        class_ids = []
-        
-        for region in ann['regions'].values():
-            points = np.array([(region['shape_attributes']['all_points_x'][i], 
-                                region['shape_attributes']['all_points_y'][i]) 
-                               for i in range(len(region['shape_attributes']['all_points_x']))], np.int32)
-            cv2.fillPoly(mask, [points], color=1)
+        annotations = json.load(open(dataset_dir))
+        annotations = list(annotations.values())  # don't need the dict keys
+
+        # The VIA tool saves images in the JSON even if they don't have any
+        # annotations. Skip unannotated images.
+        annotations = [a for a in annotations if a['shapes']]
+
+        #This loop processes each annotation, extracting polygon shapes and class labels. It assigns numeric IDs to each instance based on its label.
+        # Add images
+        for a in annotations:
+            # Get the x, y coordinaets of points of the polygons that make up
+            # the outline of each object instance. These are stores in the
+            # shape_attributes (see json format above)
+            # The if condition is needed to support VIA versions 1.x and 2.x.
+            polygons = [r['shape_attributes'] for r in a['regions'].values()] #shape_attributes = points
+            #labelling each class in the given image to a number
+
+            custom = [s['region_attributes'] for s in a['regions'].values()] #region_attributes = labels
             
-            class_name = ['label']#region['region_attributes']['label']
-            class_ids.append(self.class_dict[class_name])
+            
+            num_ids=[]
+            #Add the classes according to the requirement
+            for n in custom:
+                try:
+                    if n['label']=='Blue_Marble':
+                        num_ids.append(1)
+                    elif n['label']=='Non_Blue_Marble':
+                        num_ids.append(2)
+                except:
+                    pass
 
-        # Apply transformations
-        if self.transform:
-            image = self.transform(image)
-        
-        mask = torch.from_numpy(mask).long()
-        class_ids = torch.tensor(class_ids, dtype=torch.long)
-        
-        return image, mask, class_ids
+            # load_mask() needs the image size to convert polygons to masks.
+            # Unfortunately, VIA doesn't include it in JSON, so we must read
+            # the image. This is only managable since the dataset is tiny.
+            image_path = os.path.join(dataset_dir, a['filename'])
+            image = skimage.io.imread(image_path)
+            height, width = image.shape[:2]
 
-# Example usage:
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
+            #These lines load the image, get its dimensions, and add the image information to the dataset.
+            self.add_image(
+                "custom",
+                image_id=a['filename'],  # use file name as a unique image id
+                path=image_path,
+                width=width, height=height,
+                polygons=polygons,
+                num_ids=num_ids)
+            
+    #This method generates instance masks for an image.
+    def load_mask(self, image_id):
+        """Generate instance masks for an image.
+       Returns:
+        masks: A bool array of shape [height, width, instance count] with
+            one mask per instance.
+        class_ids: a 1D array of class IDs of the instance masks.
+        """
+        #It checks if the image is from the custom dataset, and if not, it calls the parent class's method.
+        # If not a custom dataset image, delegate to parent class.
+        image_info = self.image_info[image_id]
+        if image_info["source"] != "custom":
+            return super(self.__class__, self).load_mask(image_id)
+        num_ids = image_info['num_ids']	
+        #print("Here is the numID",num_ids)
 
-dataset = SolderDataset("path/to/dataset", "train", transform=transform)
+        #This creates a binary mask for each instance in the image based on the polygon annotations.
+        # Convert polygons to a bitmap mask of shape
+        # [height, width, instance_count]
+        info = self.image_info[image_id]
+        mask = np.zeros([info["height"], info["width"], len(info["polygons"])],
+                        dtype=np.uint8)
+        for i, p in enumerate(info["polygons"]):
+            # Get indexes of pixels inside the polygon and set them to 1
+            rr, cc = skimage.draw.polygon(p['all_points_y'], p['all_points_x'])
+            mask[rr, cc, i] = 1
+
+        # Return mask, and array of class IDs of each instance. Since we have
+        # one class ID only, we return an array of 1s
+        #It returns the mask and the corresponding class IDs.
+        num_ids = np.array(num_ids, dtype=np.int32)	
+        return mask, num_ids#.astype(np.bool), np.ones([mask.shape[-1]], dtype=np.int32), 
+
+    #This method returns the path of the image if it's from the custom dataset, otherwise it calls the parent class's method.
+    def image_reference(self, image_id):
+        """Return the path of the image."""
+        info = self.image_info[image_id]
+        if info["source"] == "custom":
+            return info["path"]
+        else:
+            super(self.__class__, self).image_reference(image_id)
+    
