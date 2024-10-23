@@ -12,7 +12,7 @@ from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.transforms import transforms as T
 from PIL import Image
-from MaskDataset1 import CustomDataset
+from History.MaskDataset1 import CustomDataset
 
 def get_model(num_classes):
     # Load a pre-trained Mask R-CNN model
