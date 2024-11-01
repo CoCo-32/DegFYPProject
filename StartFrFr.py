@@ -181,7 +181,7 @@ if __name__ == "__main__":
     )
     
     # Create model
-    model = maskrcnn_resnet50_fpn(weight='DEFAULT')
+    model = maskrcnn_resnet50_fpn(weights=None)
     model.to(device)
     
     # Create optimizer
