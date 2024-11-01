@@ -164,7 +164,7 @@ if __name__ == "__main__":
     json_file = 'annotations_in_coco.json'
     img_dir = 'SolDef_AI/Labeled'
     batch_size = 2
-    num_workers = 4
+    num_workers = 5
     num_epochs = 10
     learning_rate = 0.005
     
