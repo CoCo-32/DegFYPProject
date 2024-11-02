@@ -159,7 +159,7 @@ class RFMaskRCNNEnsemble:
             load_path (str): Path to load the combined model
         """
         # Load the state dictionary
-        model_state = torch.load(load_path, map_location=self.device)
+        model_state = torch.load(load_path, map_location=self.device, weights_only=True)
         
         # Restore Mask R-CNN model
         self.mask_rcnn.load_state_dict(model_state['mask_rcnn_state'])
