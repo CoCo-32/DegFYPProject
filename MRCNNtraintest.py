@@ -180,18 +180,20 @@ def evaluate_model(model, data_loader, device, iou_threshold=0.5):
                         all_pred_labels.append(0)  # No prediction for this ground truth
 
     # Calculate metrics
+    accuracy = np.mean(np.array(all_true_labels) == np.array(all_pred_labels))
     precision = precision_score(all_true_labels, all_pred_labels, average='weighted')
     recall = recall_score(all_true_labels, all_pred_labels, average='weighted')
     f1 = f1_score(all_true_labels, all_pred_labels, average='weighted')
     conf_matrix = confusion_matrix(all_true_labels, all_pred_labels)
     
+    print(f"Accuracy: {accuracy:.4f}")
     print(f"Precision: {precision:.4f}")
     print(f"Recall: {recall:.4f}")
     print(f"F1 Score: {f1:.4f}")
     print("Confusion Matrix:")
     print(conf_matrix)
 
-    return precision, recall, f1, conf_matrix
+    return accuracy, precision, recall, f1, conf_matrix
 
 def collate_fn(batch):
     """Custom collate function to handle variable-sized images and annotations"""
@@ -206,7 +208,7 @@ if __name__ == "__main__":
     json_file = 'annotations_in_coco.json'
     img_dir = 'SolDef_AI/Labeled'
     batch_size = 2
-    num_workers = 4
+    num_workers = 8
     num_epochs = 10
     learning_rate = 0.005
     
