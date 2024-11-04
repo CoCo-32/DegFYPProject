@@ -1,145 +1,246 @@
-import os
-import cv2
-import json
-import numpy as np
 import torch
+import torch.nn.functional as F
+import torchvision.transforms as T
+import numpy as np
+import cv2
 import joblib
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from torchvision.models.detection import maskrcnn_resnet50_fpn
-from tqdm import tqdm
+from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score
 from RFTraining import ImageDataset
 
-class EnsembleModel:
-    def __init__(self, rf_model_path, mask_rcnn_model_path, device):
-        # Load the Random Forest model
-        self.rf = joblib.load(rf_model_path)
+class BaggingEnsemble:
+    def __init__(self, maskrcnn_path, rf_path, device='cuda'):
+        self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
         
-        # Load the Mask R-CNN model
-        self.mask_rcnn = maskrcnn_resnet50_fpn(weights=None)
-        self.mask_rcnn.load_state_dict(torch.load(mask_rcnn_model_path))
-        self.mask_rcnn.to(device)
-        self.mask_rcnn.eval()  # Set to evaluation mode
+        # Load Mask R-CNN
+        self.maskrcnn = maskrcnn_resnet50_fpn(weights=None)
+        self.maskrcnn.load_state_dict(torch.load(maskrcnn_path, map_location=self.device))
+        self.maskrcnn.to(self.device)
+        self.maskrcnn.eval()
         
-        self.device = device
-
-    def predict(self, image, boxes=None):
-        """Make predictions using the ensemble model"""
-        rf_pred = self.rf.predict([self.extract_features(image, boxes)])[0]
+        # Load Random Forest
+        self.rf = joblib.load(rf_path)
         
-        # Get Mask R-CNN predictions
-        with torch.no_grad():
-            image_tensor = torch.tensor(image.transpose((2, 0, 1))).unsqueeze(0).to(self.device)  # Convert image to tensor
-            outputs = self.mask_rcnn(image_tensor)
+        # Define transforms
+        self.transform = T.Compose([
+            T.ToTensor(),
+            T.Normalize(mean=[0.485, 0.456, 0.406], 
+                       std=[0.229, 0.224, 0.225])
+        ])
         
-        # Extract Mask R-CNN predictions
-        mask_rcnn_preds = outputs[0]['labels'].cpu().numpy() if len(outputs) > 0 else []
+        # Feature extraction parameters (matching RF training)
+        self.n_histogram_bins = 32
+        self.n_haralick_bins = 16
         
-        return rf_pred, mask_rcnn_preds
-
-    def extract_features(self, image, boxes=None):
-        """Extract fixed-length feature vector from image for Random Forest"""
-        # Similar feature extraction as done in RFImageClassifier
+    def extract_features(self, image, boxes):
+        """Extract features for Random Forest prediction"""
+        if isinstance(image, torch.Tensor):
+            image = image.cpu().numpy()
         if len(image.shape) == 3 and image.shape[0] == 3:
+            image = np.transpose(image, (1, 2, 0))
+            
+        # Convert to grayscale
+        if len(image.shape) == 3:
             gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        
+        else:
+            gray = image
+            
         features = []
         
-        # Histogram feature
-        hist = cv2.calcHist([gray], [0], None, [32], [0, 256]).flatten() / cv2.calcHist([gray], [0], None, [32], [0, 256]).sum()
+        # Extract histogram features
+        hist = cv2.calcHist([gray], [0], None, [self.n_histogram_bins], [0, 256])
+        hist = hist.flatten() / hist.sum()
         features.extend(hist)
         
         # Basic statistics
-        features.extend([np.mean(gray), np.std(gray), np.median(gray)])
+        features.extend([
+            np.mean(gray),
+            np.std(gray),
+            np.median(gray)
+        ])
         
-        # Box features (if boxes are provided)
-        if boxes is not None and len(boxes) > 0:
-            box = boxes[0]  # Assume we take the first box
-            width = box[2] - box[0]
-            height = box[3] - box[1]
+        # Texture features
+        haralick = cv2.calcHist([gray], [0], None, [self.n_haralick_bins], [0, 256])
+        haralick = haralick.flatten() / haralick.sum()
+        features.extend(haralick)
+        
+        # Box features
+        if len(boxes) > 0:
+            areas = [(box[2] - box[0]) * (box[3] - box[1]) for box in boxes]
+            largest_box = boxes[np.argmax(areas)]
+            width = largest_box[2] - largest_box[0]
+            height = largest_box[3] - largest_box[1]
             area = width * height
             aspect_ratio = width / height if height != 0 else 0
-            features.extend([width, height, area, aspect_ratio])
+            box_features = [width, height, area, aspect_ratio]
         else:
-            features.extend([0, 0, 0, 0])
+            box_features = [0, 0, 0, 0]
         
+        features.extend(box_features)
         return np.array(features, dtype=np.float32)
-
-    def evaluate(self, data_loader):
-        """Evaluate the ensemble model on the dataset"""
-        all_true_labels = []
-        all_rf_preds = []
-        all_mask_rcnn_preds = []
-
-        for images, targets in tqdm(data_loader):
+    
+    def predict(self, image, confidence_threshold=0.5, ensemble_method='weighted_average', weights=(0.6, 0.4)):
+        """
+        Make ensemble predictions using both models
+        
+        Args:
+            image: RGB image array
+            confidence_threshold: threshold for Mask R-CNN predictions
+            ensemble_method: 'weighted_average' or 'max_confidence'
+            weights: tuple of (maskrcnn_weight, rf_weight) for weighted averaging
+            
+        Returns:
+            Dictionary containing combined predictions and individual model outputs
+        """
+        # Prepare image for Mask R-CNN
+        if not isinstance(image, torch.Tensor):
+            transformed_image = self.transform(image)
+        else:
+            transformed_image = image
+            
+        # Get Mask R-CNN predictions
+        with torch.no_grad():
+            maskrcnn_pred = self.maskrcnn([transformed_image.to(self.device)])[0]
+            
+        # Filter predictions by confidence
+        mask_scores = maskrcnn_pred['scores'].cpu()
+        mask_boxes = maskrcnn_pred['boxes'].cpu()
+        mask_labels = maskrcnn_pred['labels'].cpu()
+        mask_masks = maskrcnn_pred['masks'].cpu()
+        
+        confident_idx = mask_scores >= confidence_threshold
+        confident_boxes = mask_boxes[confident_idx]
+        confident_labels = mask_labels[confident_idx]
+        confident_scores = mask_scores[confident_idx]
+        confident_masks = mask_masks[confident_idx]
+        
+        # Get Random Forest predictions
+        rf_features = self.extract_features(image, confident_boxes.numpy())
+        rf_pred = self.rf.predict_proba([rf_features])[0]
+        
+        # Combine predictions based on ensemble method
+        if ensemble_method == 'weighted_average':
+            # Convert Mask R-CNN outputs to probability distribution
+            maskrcnn_probs = torch.zeros(len(self.rf.classes_))
+            for label, score in zip(confident_labels, confident_scores):
+                maskrcnn_probs[label.item()] = max(maskrcnn_probs[label.item()], score.item())
+            
+            # Combine probabilities using weights
+            combined_probs = (weights[0] * maskrcnn_probs + 
+                            weights[1] * torch.tensor(rf_pred))
+            final_prediction = int(torch.argmax(combined_probs))
+            
+        elif ensemble_method == 'max_confidence':
+            # Take prediction from model with highest confidence
+            maskrcnn_conf = torch.max(confident_scores) if len(confident_scores) > 0 else 0
+            rf_conf = np.max(rf_pred)
+            
+            if maskrcnn_conf > rf_conf:
+                final_prediction = confident_labels[0].item()
+            else:
+                final_prediction = np.argmax(rf_pred)
+        
+        return {
+            'final_prediction': final_prediction,
+            'maskrcnn_boxes': confident_boxes,
+            'maskrcnn_labels': confident_labels,
+            'maskrcnn_scores': confident_scores,
+            'maskrcnn_masks': confident_masks,
+            'rf_probabilities': rf_pred
+        }
+    
+    def evaluate(self, data_loader, ensemble_method='weighted_average', weights=(0.6, 0.4)):
+        """Evaluate the ensemble model on a dataset"""
+        all_preds = []
+        all_labels = []
+        
+        for images, targets in data_loader:
             for image, target in zip(images, targets):
-                # Convert tensor to numpy
-                image_np = image.numpy().transpose((1, 2, 0))  # Convert to HWC format
+                # Get ensemble prediction
+                pred_result = self.predict(
+                    image, 
+                    ensemble_method=ensemble_method,
+                    weights=weights
+                )
                 
-                # Get boxes
-                boxes = target['boxes'].numpy() if len(target['boxes']) > 0 else None
+                # Get ground truth label (assuming single label per image)
+                true_label = target['labels'][0].item() if len(target['labels']) > 0 else 0
                 
-                rf_pred, mask_rcnn_preds = self.predict(image_np, boxes)
-                
-                all_rf_preds.append(rf_pred)
-                all_mask_rcnn_preds.extend(mask_rcnn_preds)
-                
-                # Get ground truth labels (assuming single label per image)
-                if len(target['labels']) > 0:
-                    all_true_labels.append(target['labels'][0].item())
-                else:
-                    all_true_labels.append(0)
-
-        # Combine predictions (simple majority voting)
-        final_predictions = []
-        for i in range(len(all_rf_preds)):
-            final_predictions.append(np.argmax([all_rf_preds[i]] + list(all_mask_rcnn_preds[i])))
-
+                all_preds.append(pred_result['final_prediction'])
+                all_labels.append(true_label)
+        
         # Calculate metrics
-        accuracy = accuracy_score(all_true_labels, final_predictions)
-        precision = precision_score(all_true_labels, final_predictions, average='weighted', zero_division=0)
-        recall = recall_score(all_true_labels, final_predictions, average='weighted', zero_division=0)
-        f1 = f1_score(all_true_labels, final_predictions, average='weighted', zero_division=0)
-        conf_matrix = confusion_matrix(all_true_labels, final_predictions)
-
-        print(f"Accuracy: {accuracy:.4f}")
-        print(f"Precision: {precision:.4f}")
-        print(f"Recall: {recall:.4f}")
-        print(f"F1 Score: {f1:.4f}")
-        print("Confusion Matrix:")
-        print(conf_matrix)
-
+        accuracy = np.mean(np.array(all_preds) == np.array(all_labels))
+        precision = precision_score(all_labels, all_preds, average='weighted', zero_division=0)
+        recall = recall_score(all_labels, all_preds, average='weighted', zero_division=0)
+        f1 = f1_score(all_labels, all_preds, average='weighted', zero_division=0)
+        conf_matrix = confusion_matrix(all_labels, all_preds)
+        
+        return {
+            'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall,
+            'f1_score': f1,
+            'confusion_matrix': conf_matrix
+        }
+    
 def collate_fn(batch):
     return tuple(zip(*batch))
 
-if __name__ == "__main__":
-    # Set device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
-
-    # Load data
-    json_file = 'annotations_in_coco.json'
-    img_dir = 'SolDef_AI/Labeled'
-    batch_size = 2
-    num_workers = 8
-
-    # Create dataset and data loader for evaluation
-    dataset = ImageDataset(json_file=json_file, img_dir=img_dir)
+def main():
+    # Example usage
+    maskrcnn_path = 'MaskRCNNModelV1.2.pth'
+    rf_path = 'RandomForestModelV1.joblib'
+    
+    # Create ensemble
+    ensemble = BaggingEnsemble(
+        maskrcnn_path=maskrcnn_path,
+        rf_path=rf_path,
+        device='cuda'
+    )
+    
+    # Create dataset and dataloader (using your existing Dataset class)
+    dataset = ImageDataset(
+        json_file='annotations_in_coco.json',
+        img_dir='SolDef_AI/Labeled'
+    )
     data_loader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=batch_size,
+        batch_size=1,
         shuffle=False,
-        num_workers=num_workers,
+        num_workers=4,
         collate_fn=collate_fn
     )
+    
+    # Evaluate ensemble with different methods
+    print("Evaluating weighted average ensemble...")
+    weighted_results = ensemble.evaluate(
+        data_loader,
+        ensemble_method='weighted_average',
+        weights=(0.6, 0.4)
+    )
+    
+    print("\nWeighted Average Results:")
+    print(f"Accuracy: {weighted_results['accuracy']:.4f}")
+    print(f"Precision: {weighted_results['precision']:.4f}")
+    print(f"Recall: {weighted_results['recall']:.4f}")
+    print(f"F1 Score: {weighted_results['f1_score']:.4f}")
+    print("Confusion Matrix:")
+    print(weighted_results['confusion_matrix'])
+    
+    print("\nEvaluating max confidence ensemble...")
+    max_conf_results = ensemble.evaluate(
+        data_loader,
+        ensemble_method='max_confidence'
+    )
+    
+    print("\nMax Confidence Results:")
+    print(f"Accuracy: {max_conf_results['accuracy']:.4f}")
+    print(f"Precision: {max_conf_results['precision']:.4f}")
+    print(f"Recall: {max_conf_results['recall']:.4f}")
+    print(f"F1 Score: {max_conf_results['f1_score']:.4f}")
+    print("Confusion Matrix:")
+    print(max_conf_results['confusion_matrix'])
 
-    # Initialize the ensemble model
-    rf_model_path = 'RandomForestModelV1.joblib'
-    mask_rcnn_model_path = 'MaskRCNNModelV1.2.pth'
-    ensemble_model = EnsembleModel(rf_model_path, mask_rcnn_model_path, device)
-
-    # Evaluate the ensemble model
-    print("Evaluating ensemble model...")
-    ensemble_model.evaluate(data_loader)
-
-    torch.save(ensemble_model.state_dict(), 'BaggingEnsemble.pth')
-    print("Model saved as 'BaggingEnsemble.pth'")
+if __name__ == "__main__":
+    main()
