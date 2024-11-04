@@ -1,10 +1,13 @@
 import torch
+import torchvision
 import torchvision.transforms as T
 from PIL import Image
 import matplotlib.pyplot as plt
 
 # Load a pre-trained Mask R-CNN model
-model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)
+model_path = 'MaskRCNNModelwMatrixV1.2.pth'
+model = torchvision.models.detection.maskrcnn_resnet50_fpn(weights='DEFAULT')
+model.load_state_dict(torch.load(model_path)) 
 model.eval()  # Set the model to evaluation mode
 
 # Define a transformation for the input image
@@ -13,7 +16,7 @@ transform = T.Compose([
 ])
 
 # Load your image
-image_path = 'path/to/your/image.jpg'
+image_path = 'WIN_20220330_16_56_08_Pro.jpg'
 image = Image.open(image_path).convert("RGB")
 image_tensor = transform(image).unsqueeze(0)  # Add batch dimension
 
