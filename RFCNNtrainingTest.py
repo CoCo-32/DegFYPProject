@@ -9,6 +9,9 @@ from pycocotools.mask import encode, decode
 from torchvision.models.detection import maskrcnn_resnet50_fpn
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
 from tqdm import tqdm
 
 class RFMaskRCNNEnsemble:
@@ -170,6 +173,49 @@ class RFMaskRCNNEnsemble:
         
         print(f"Ensemble model loaded from {load_path}")
 
+    def evaluate_metrics(self, data_loader):
+        """Evaluate the ensemble model with accuracy, precision, recall, F1 score, and confusion matrix"""
+        print("Evaluating the ensemble model...")
+
+        all_true_labels = []
+        all_rf_predictions = []
+
+        self.mask_rcnn.eval()
+        with torch.no_grad():
+            for images, targets in tqdm(data_loader):
+                # Extract true labels from targets
+                true_labels = [t['labels'][0].item() if len(t['labels']) > 0 else 0 for t in targets]
+                all_true_labels.extend(true_labels)
+
+                # Get Random Forest predictions
+                batch_features = self.extract_features(images)
+                rf_predictions = self.rf.predict(batch_features)
+                all_rf_predictions.extend(rf_predictions)
+
+        # Convert lists to arrays for metrics calculation
+        all_true_labels = np.array(all_true_labels)
+        all_rf_predictions = np.array(all_rf_predictions)
+
+        # Calculate metrics
+        accuracy = accuracy_score(all_true_labels, all_rf_predictions)
+        precision = precision_score(all_true_labels, all_rf_predictions, average='weighted')
+        recall = recall_score(all_true_labels, all_rf_predictions, average='weighted')
+        f1 = f1_score(all_true_labels, all_rf_predictions, average='weighted')
+        conf_matrix = confusion_matrix(all_true_labels, all_rf_predictions)
+
+        print(f"Accuracy: {accuracy:.4f}")
+        print(f"Precision: {precision:.4f}")
+        print(f"Recall: {recall:.4f}")
+        print(f"F1 Score: {f1:.4f}")
+
+        # Plot confusion matrix
+        plt.figure(figsize=(10, 7))
+        sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", xticklabels=True, yticklabels=True)
+        plt.xlabel("Predicted Labels")
+        plt.ylabel("True Labels")
+        plt.title("Confusion Matrix for Random Forest Predictions")
+        plt.show()
+
 class MaskRCNNDataset(Dataset):
     def __init__(self, json_file, img_dir, transform=None):
 
@@ -281,18 +327,8 @@ if __name__ == "__main__":
         ensemble.save_model('ensemble_model.pth')
         print("Models saved successfully!")
         
-        # Demonstrate loading the model
-        loaded_ensemble = RFMaskRCNNEnsemble()
-        loaded_ensemble.load_model('ensemble_model.pth')
-        
-        # Test the loaded ensemble
-        print("\nTesting loaded ensemble model...")
-        test_image, test_target = next(iter(data_loader))
-        predictions = loaded_ensemble.predict(test_image[0])
-        
-        print("Test predictions:")
-        print(f"Number of Mask R-CNN detections: {len(predictions['mask_rcnn']['boxes'])}")
-        print(f"Random Forest class probabilities: {predictions['rf_probabilities']}")
+        # Evaluate the ensemble model with metrics
+        ensemble.evaluate_metrics(data_loader)
         
     except Exception as e:
         print(f"An error occurred: {str(e)}")
