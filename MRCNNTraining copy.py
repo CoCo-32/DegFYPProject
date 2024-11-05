@@ -205,9 +205,9 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
     
     # Dataset parameters
-    json_file = 'annotations_in_coco.json'
+    json_file = '45DegAnnoInCOCO.json'
     img_dir = 'SolDef_AI/Labeled'
-    batch_size = 4  # Ori = 2
+    batch_size = 16  # Ori = 2
     num_workers = 8
     num_epochs = 10       # Ori = 10
     learning_rate = 0.05 # Ori = 0.005
@@ -258,13 +258,9 @@ if __name__ == "__main__":
             # Set model to evaluation mode and calculate training accuracy
             model.eval()
             print(f"Evaluating training accuracy after epoch {epoch + 1}...")
-            accuracy, precision, recall, f1, conf_matrix = evaluate_model(model, data_loader, device)
+            accuracy = evaluate_model(model, data_loader, device)
             print(f"Training Accuracy: {accuracy:.4f}")
-            print(f"Training Precision: {precision:.4f}")
-            print(f"Training Recall: {recall:.4f}")
-            print(f"Training F1 Score: {f1:.4f}")
-            print("Training Confusion Matrix:")
-            print(conf_matrix)
+
         # Save model
         torch.save(model.state_dict(), 'mask_rcnn_model.pth')
         print("Model saved as 'mask_rcnn_model.pth'")

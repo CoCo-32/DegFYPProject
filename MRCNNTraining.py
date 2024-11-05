@@ -205,12 +205,12 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
     
     # Dataset parameters
-    json_file = 'annotations_in_coco.json'
+    json_file = 'TopDownAnnoInCOCO.json'
     img_dir = 'SolDef_AI/Labeled'
     batch_size = 4  # Ori = 2
     num_workers = 8
     num_epochs = 10       # Ori = 10
-    learning_rate = 0.05 # Ori = 0.005
+    learning_rate = 0.005 # Ori = 0.005
     
     # Create dataset
     dataset = MaskRCNNDataset(json_file=json_file, img_dir=img_dir)
