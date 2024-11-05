@@ -207,7 +207,7 @@ class RFMaskRCNNEnsemble:
         f1 = f1_score(all_true_labels, all_rf_predictions, average='weighted')
         conf_matrix = confusion_matrix(all_true_labels, all_rf_predictions)
 
-        print(f"Accuracy: {accuracy:.4f}")
+        print(f"Testing Accuracy: {accuracy:.4f}")
         print(f"Precision: {precision:.4f}")
         print(f"Recall: {recall:.4f}")
         print(f"F1 Score: {f1:.4f}")
