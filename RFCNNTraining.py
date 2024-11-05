@@ -112,6 +112,10 @@ class RFMaskRCNNEnsemble:
         print("Training Random Forest...")
         self.rf.fit(X_train, y_train)
         
+        # Evaluate on training set
+        train_accuracy = self.rf.score(X_train, y_train)
+        print(f"Random Forest Training Accuracy: {train_accuracy:.4f}")
+        
         # Evaluate
         rf_score = self.rf.score(X_val, y_val)
         print(f"Random Forest Validation Score: {rf_score:.4f}")
