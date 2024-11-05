@@ -15,7 +15,7 @@ import seaborn as sns
 from tqdm import tqdm
 
 class RFMaskRCNNEnsemble:
-    def __init__(self, n_estimators=100):
+    def __init__(self, n_estimators=10):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.mask_rcnn = maskrcnn_resnet50_fpn(weights=None)
         self.mask_rcnn.to(self.device)
@@ -307,7 +307,7 @@ if __name__ == "__main__":
     # Dataset parameters
     json_file = 'annotations_in_coco.json'
     img_dir = 'SolDef_AI/Labeled'
-    batch_size = 2
+    batch_size = 8
     num_workers = 8
     
     # Create dataset and data loader
@@ -321,7 +321,7 @@ if __name__ == "__main__":
     )
     
     # Create and train ensemble model
-    ensemble = RFMaskRCNNEnsemble(n_estimators=100)
+    ensemble = RFMaskRCNNEnsemble(n_estimators=10)
     
     try:
         print("Training ensemble model...")
