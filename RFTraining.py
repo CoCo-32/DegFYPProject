@@ -12,7 +12,7 @@ import torchvision.transforms as T
 from tqdm import tqdm
 
 class RFImageClassifier:
-    def __init__(self, n_estimators=100):
+    def __init__(self, n_estimators=10):
         self.rf = RandomForestClassifier(n_estimators=n_estimators)
         # Define fixed feature sizes
         self.n_histogram_bins = 32
@@ -245,7 +245,7 @@ if __name__ == "__main__":
     )
     
     # Create and train Random Forest model
-    rf_classifier = RFImageClassifier(n_estimators=100)
+    rf_classifier = RFImageClassifier(n_estimators=10)
     
     try:
         print("Training Random Forest model...")
@@ -256,8 +256,8 @@ if __name__ == "__main__":
         print("Model saved successfully!")
         
         # Test the model
-        test_image, test_target = next(iter(data_loader))
-        predictions = rf_classifier.predict(test_image[0], test_target[0]['boxes'])
+        #test_image, test_target = next(iter(data_loader))
+        #predictions = rf_classifier.predict(test_image[0], test_target[0]['boxes'])
         
     except Exception as e:
         print(f"An error occurred: {str(e)}")

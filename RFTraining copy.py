@@ -12,7 +12,7 @@ import torchvision.transforms as T
 from tqdm import tqdm
 
 class RFImageClassifier:
-    def __init__(self, n_estimators=20):
+    def __init__(self, n_estimators=50):
         self.rf = RandomForestClassifier(n_estimators=n_estimators)
         # Define fixed feature sizes
         self.n_histogram_bins = 32
@@ -257,7 +257,7 @@ if __name__ == "__main__":
     )
     
     # Create and train Random Forest model
-    rf_classifier = RFImageClassifier(n_estimators=100)
+    rf_classifier = RFImageClassifier(n_estimators=50)
     
     try:
         print("Training Random Forest model...")

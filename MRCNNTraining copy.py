@@ -186,14 +186,70 @@ def evaluate_model(model, data_loader, device, iou_threshold=0.5):
     f1 = f1_score(all_true_labels, all_pred_labels, average='weighted')
     conf_matrix = confusion_matrix(all_true_labels, all_pred_labels)
     
-    print(f"Testing Accuracy: {accuracy:.4f}")
-    print(f"Testing Precision: {precision:.4f}")
-    print(f"Testing Recall: {recall:.4f}")
-    print(f"Testing F1 Score: {f1:.4f}")
+    print(f"Accuracy: {accuracy:.4f}")
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print(f"F1 Score: {f1:.4f}")
     print("Confusion Matrix:")
     print(conf_matrix)
 
     return accuracy, precision, recall, f1, conf_matrix
+
+def calculate_training_accuracy(model, data_loader, device):
+    """Calculate the training accuracy."""
+    model.eval()  # Set the model to evaluation mode
+    all_true_labels = []
+    all_pred_labels = []
+    
+    with torch.no_grad():
+        for images, targets in data_loader:
+            images = [image.to(device) for image in images]
+            outputs = model(images)
+
+            for i, target in enumerate(targets):
+                gt_boxes = target['boxes'].cpu()
+                gt_labels = target['labels'].cpu()
+
+                pred_boxes = outputs[i]['boxes'].cpu()
+                pred_labels = outputs[i]['labels'].cpu()
+                pred_scores = outputs[i]['scores'].cpu()
+                
+                # Filter predictions by score threshold
+                pred_boxes = pred_boxes[pred_scores > 0.5]
+                pred_labels = pred_labels[pred_scores > 0.5]
+
+                # Match predictions to ground truth
+                matched_gt = set()
+                for pred_box, pred_label in zip(pred_boxes, pred_labels):
+                    best_iou = 0.0
+                    best_gt_idx = -1
+                    for idx, (gt_box, gt_label) in enumerate(zip(gt_boxes, gt_labels)):
+                        if idx in matched_gt or pred_label != gt_label:
+                            continue
+                        iou = calculate_iou(pred_box, gt_box)
+                        if iou > best_iou:
+                            best_iou = iou
+                            best_gt_idx = idx
+                    
+                    # Count true positives
+                    if best_gt_idx >= 0:
+                        matched_gt.add(best_gt_idx)
+                        all_true_labels.append(gt_labels[best_gt_idx].item())
+                        all_pred_labels.append(pred_label.item())
+                    else:
+                        all_pred_labels.append(pred_label.item())
+                        all_true_labels.append(0)  # False positive
+
+                # Add any unmatched ground truths as false negatives
+                for idx, gt_label in enumerate(gt_labels):
+                    if idx not in matched_gt:
+                        all_true_labels.append(gt_label.item())
+                        all_pred_labels.append(0)  # No prediction for this ground truth
+
+    # Calculate accuracy
+    accuracy = np.mean(np.array(all_true_labels) == np.array(all_pred_labels))
+    return accuracy
+
 
 def collate_fn(batch):
     """Custom collate function to handle variable-sized images and annotations"""
@@ -236,7 +292,6 @@ if __name__ == "__main__":
         model.train()
         for epoch in range(num_epochs):
             print(f"Epoch {epoch + 1}/{num_epochs}")
-            epoch_loss = 0  
             for images, targets in tqdm(data_loader, desc=f"Training Epoch {epoch + 1}"):
                 images = [image.to(device) for image in images]
                 targets = [{k: v.to(device) for k, v in target.items()} for target in targets]
@@ -246,25 +301,19 @@ if __name__ == "__main__":
                 
                 # Total loss
                 losses = sum(loss for loss in loss_dict.values())
-                epoch_loss += losses.item()
                 
                 # Backward pass
                 optimizer.zero_grad()
                 losses.backward()
                 optimizer.step()
 
-            print(f"Epoch {epoch + 1} Loss: {epoch_loss / len(data_loader):.4f}")
+            print(f"Epoch {epoch + 1} Loss: {losses.item():.4f}")
+
+            # Calculate and print training accuracy after each epoch
+            training_accuracy = calculate_training_accuracy(model, data_loader, device)
+            print(f"Training Accuracy after epoch {epoch + 1}: {training_accuracy:.4f}")
+    
         
-            # Set model to evaluation mode and calculate training accuracy
-            model.eval()
-            print(f"Evaluating training accuracy after epoch {epoch + 1}...")
-            accuracy, precision, recall, f1, conf_matrix = evaluate_model(model, data_loader, device)
-            print(f"Training Accuracy: {accuracy:.4f}")
-            print(f"Training Precision: {precision:.4f}")
-            print(f"Training Recall: {recall:.4f}")
-            print(f"Training F1 Score: {f1:.4f}")
-            print("Training Confusion Matrix:")
-            print(conf_matrix)
         # Save model
         torch.save(model.state_dict(), 'mask_rcnn_model.pth')
         print("Model saved as 'mask_rcnn_model.pth'")
