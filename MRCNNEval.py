@@ -262,7 +262,7 @@ def load_and_evaluate_model(model_path, json_file, img_dir, batch_size=1, num_wo
 
 if __name__ == "__main__":
     # Configuration
-    MODEL_PATH = "MaskRCNNModelV1.2.pth"
+    MODEL_PATH = "MaskRCNNModelV1.1.pth"
     JSON_FILE = "annotations_in_coco.json"
     IMG_DIR = "SolDef_AI/Labeled"
     

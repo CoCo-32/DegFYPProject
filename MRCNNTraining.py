@@ -207,10 +207,10 @@ if __name__ == "__main__":
     # Dataset parameters
     json_file = 'annotations_in_coco.json'
     img_dir = 'SolDef_AI/Labeled'
-    batch_size = 2
+    batch_size = 4  # Ori = 2
     num_workers = 8
-    num_epochs = 10
-    learning_rate = 0.005
+    num_epochs = 10       # Ori = 10
+    learning_rate = 0.05 # Ori = 0.005
     
     # Create dataset
     dataset = MaskRCNNDataset(json_file=json_file, img_dir=img_dir)
