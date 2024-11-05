@@ -4,7 +4,7 @@ import numpy as np
 
 # Load the original annotation file and declare output file
 json_dir = 'SolDef_AI/Labeled'  # Replace with your file path
-coco_output_file = 'annotations_in_coco.json'
+coco_output_file = 'TopDownAnnoInCOCO.json'
 
 # Initialize COCO structure
 coco_output = {

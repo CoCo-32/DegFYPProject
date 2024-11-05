@@ -105,7 +105,7 @@ class RFImageClassifier:
         print(f"Number of samples: {len(labels)}")
         
         # Split data for training and validation
-        X_train, X_val, y_train, y_val = train_test_split(features, labels, test_size=0.2)
+        X_train, X_val, y_train, y_val = train_test_split(features, labels, test_size=0.1)
         
         # Train Random Forest
         print("Training Random Forest...")
@@ -224,9 +224,9 @@ def collate_fn(batch):
 
 if __name__ == "__main__":
     # Dataset parameters
-    json_file = 'annotations_in_coco.json'
-    img_dir = 'SolDef_AI/Labeled'
-    batch_size = 2
+    json_file = '45DegAnnoInCOCO.json'
+    img_dir = 'SolDef_AI/45deg'
+    batch_size = 4
     num_workers = 4
     
     # Create dataset and data loader
@@ -254,10 +254,6 @@ if __name__ == "__main__":
         print("\nTesting Random Forest model...")
         test_image, test_target = next(iter(data_loader))
         predictions = rf_classifier.predict(test_image[0], test_target[0]['boxes'])
-        
-        print("Test predictions:")
-        print(f"Predicted class: {predictions['predicted_class']}")
-        print(f"Class probabilities: {predictions['class_probabilities']}")
         
     except Exception as e:
         print(f"An error occurred: {str(e)}")

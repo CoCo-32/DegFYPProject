@@ -5,7 +5,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 
 # Load a pre-trained Mask R-CNN model
-model_path = 'MaskRCNNModelwMatrixV1.2.pth'
+model_path = 'MaskRCNNModelV1.2.pth'
 model = torchvision.models.detection.maskrcnn_resnet50_fpn(weights='DEFAULT')
 model.load_state_dict(torch.load(model_path)) 
 model.eval()  # Set the model to evaluation mode
@@ -16,7 +16,7 @@ transform = T.Compose([
 ])
 
 # Load your image
-image_path = 'WIN_20220330_16_56_08_Pro.jpg'
+image_path = 'SolDef_AI/Labeled/WIN_20220329_14_32_45_Pro.jpg'
 image = Image.open(image_path).convert("RGB")
 image_tensor = transform(image).unsqueeze(0)  # Add batch dimension
 
