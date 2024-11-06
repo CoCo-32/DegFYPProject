@@ -231,7 +231,7 @@ if __name__ == "__main__":
     # Dataset parameters
     json_file = 'annotations_in_coco.json'
     img_dir = 'SolDef_AI/Labeled'
-    batch_size = 16
+    batch_size = 2
     num_workers = 4
     
     # Create dataset and data loader

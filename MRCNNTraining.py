@@ -205,11 +205,11 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
     
     # Dataset parameters
-    json_file = 'TopDownAnnoInCOCO.json'
+    json_file = 'annotations_in_coco.json'
     img_dir = 'SolDef_AI/Labeled'
     batch_size = 4  # Ori = 2
     num_workers = 8
-    num_epochs = 10       # Ori = 10
+    num_epochs = 10       #Ori = 10
     learning_rate = 0.005 # Ori = 0.005
     
     # Create dataset
