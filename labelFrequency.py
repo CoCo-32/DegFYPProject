@@ -92,6 +92,9 @@ for filename in os.listdir(json_dir):
         # Increment image ID for the next file
         image_id += 1
 
+# Print total number of labels
+total_labels = sum(label_counts.values())
+print(f"Total labels: {total_labels}")
 
 # Step 4: Plot the label frequencies
 labels = list(label_counts.keys())

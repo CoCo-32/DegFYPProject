@@ -17,7 +17,7 @@ from tqdm import tqdm
 class RFMaskRCNNEnsemble:
     def __init__(self, n_estimators=10):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.mask_rcnn = maskrcnn_resnet50_fpn(weights=None)
+        self.mask_rcnn = maskrcnn_resnet50_fpn(weights='DEFAULT')
         self.mask_rcnn.to(self.device)
         self.rf = RandomForestClassifier(n_estimators=n_estimators)
          # Takes layers from Mask R-CNN backbone except the last one for feature extraction

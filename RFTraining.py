@@ -12,7 +12,7 @@ import torchvision.transforms as T
 from tqdm import tqdm
 
 class RFImageClassifier:
-    def __init__(self, n_estimators=10):
+    def __init__(self, n_estimators=5):
         self.rf = RandomForestClassifier(n_estimators=n_estimators)
         # Define fixed feature sizes
         self.n_histogram_bins = 32
@@ -231,7 +231,7 @@ if __name__ == "__main__":
     # Dataset parameters
     json_file = 'annotations_in_coco.json'
     img_dir = 'SolDef_AI/Labeled'
-    batch_size = 16
+    batch_size = 8
     num_workers = 4
     
     # Create dataset and data loader
@@ -245,7 +245,7 @@ if __name__ == "__main__":
     )
     
     # Create and train Random Forest model
-    rf_classifier = RFImageClassifier(n_estimators=10)
+    rf_classifier = RFImageClassifier(n_estimators=5)
     
     try:
         print("Training Random Forest model...")
