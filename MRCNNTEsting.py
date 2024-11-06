@@ -16,7 +16,7 @@ transform = T.Compose([
 ])
 
 # Load your image
-image_path = 'SolDef_AI/Labeled/WIN_20220329_14_32_45_Pro.jpg'
+image_path = 'SolDef_AI/Test/WIN_20220329_14_32_22_Pro.jpg'
 image = Image.open(image_path).convert("RGB")
 image_tensor = transform(image).unsqueeze(0)  # Add batch dimension
 

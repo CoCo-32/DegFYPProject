@@ -89,7 +89,7 @@ if __name__ == "__main__":
     dataset = MaskRCNNDataset(json_file=json_file, img_dir=img_dir)
     
     # Load the sample from the dataset (replace `dataset` and `0` with your actual dataset and index)
-    sample = dataset[300]
+    sample = dataset[0]
     image = sample['image']
     masks = sample['masks']
     boxes = sample['boxes']
