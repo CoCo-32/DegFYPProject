@@ -263,7 +263,7 @@ if __name__ == "__main__":
     # Dataset parameters
     json_file = '45DegAnnoInCOCO.json'
     img_dir = 'SolDef_AI/Labeled'
-    batch_size = 16  # Ori = 2
+    batch_size = 8  # Ori = 2
     num_workers = 8
     num_epochs = 10       # Ori = 10
     learning_rate = 0.05 # Ori = 0.005
@@ -312,7 +312,6 @@ if __name__ == "__main__":
             # Calculate and print training accuracy after each epoch
             training_accuracy = calculate_training_accuracy(model, data_loader, device)
             print(f"Training Accuracy after epoch {epoch + 1}: {training_accuracy:.4f}")
-    
         
         # Save model
         torch.save(model.state_dict(), 'mask_rcnn_model.pth')
