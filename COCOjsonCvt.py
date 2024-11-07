@@ -2,11 +2,11 @@ import json
 import os
 import numpy as np
 
-# Load the original annotation file and declare output file
-json_dir = 'SolDef_AI/Labeled'  # Replace with your file path
-coco_output_file = 'TopDownAnnoInCOCO.json'
+# Load the original annotation and declare output file
+json_dir = 'SolDef_AI/Labeled' 
+coco_output_file = 'annotations_in_coco.json'
 
-# Initialize COCO structure
+# Set up COCO format
 coco_output = {
     "images": [],
     "annotations": [],
@@ -17,7 +17,7 @@ coco_output = {
 image_id = 1
 annotation_id = 1
 
-# Manually define category IDs based on the label
+# Define category IDs based on the label
 category_id_mapping = {
     "good": 1,
     "no_good": 2,
@@ -64,7 +64,7 @@ for filename in os.listdir(json_dir):
                 print(f"Warning: Label '{label}' not found in category mapping. Skipping annotation.")
                 continue
 
-            # Convert polygon points to segmentation format (flattened list of coordinates)
+            # Convert polygon points to segmentation format 
             polygon_points = np.array(shape["points"]).flatten().tolist()
 
             # Compute the bounding box for the polygon
@@ -75,17 +75,17 @@ for filename in os.listdir(json_dir):
             # Create the annotation structure
             annotation_info = {
                 "id": annotation_id,
-                "iscrowd": 0,  # Assuming all annotations are non-crowd
+                "iscrowd": 0,  
                 "image_id": image_id,
                 "category_id": category_id,
-                "segmentation": [polygon_points],  # List of polygons, each polygon is a list of x, y coordinates
-                "bbox": bbox,  # COCO format requires [x_min, y_min, width, height]
-                "area": bbox[2] * bbox[3]  # Area of the bounding box
+                "segmentation": [polygon_points],   # List of polygons, each polygon is a list of x, y coordinates
+                "bbox": bbox,                       # COCO format = [x_min, y_min, width, height]
+                "area": bbox[2] * bbox[3]           # Area of the bounding box
             }
             coco_output["annotations"].append(annotation_info)
             annotation_id += 1
 
-        # Increment image ID for the next file
+        # Increase image ID for the next file
         image_id += 1
 
 # Step 3: Save the COCO formatted JSON

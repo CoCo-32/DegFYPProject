@@ -9,12 +9,15 @@ from pycocotools.mask import encode, decode
 from torchvision.models.detection import maskrcnn_resnet50_fpn
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
 from tqdm import tqdm
 
 class RFMaskRCNNEnsemble:
-    def __init__(self, n_estimators=100):
+    def __init__(self, n_estimators=10):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.mask_rcnn = maskrcnn_resnet50_fpn(weights=None)
+        self.mask_rcnn = maskrcnn_resnet50_fpn(weights='DEFAULT')
         self.mask_rcnn.to(self.device)
         self.rf = RandomForestClassifier(n_estimators=n_estimators)
          # Takes layers from Mask R-CNN backbone except the last one for feature extraction
@@ -109,6 +112,10 @@ class RFMaskRCNNEnsemble:
         print("Training Random Forest...")
         self.rf.fit(X_train, y_train)
         
+        # Evaluate on training set
+        train_accuracy = self.rf.score(X_train, y_train)
+        print(f"Training Accuracy: {train_accuracy:.4f}")
+        
         # Evaluate
         rf_score = self.rf.score(X_val, y_val)
         print(f"Random Forest Validation Score: {rf_score:.4f}")
@@ -133,12 +140,91 @@ class RFMaskRCNNEnsemble:
             }
             
             return combined_pred
+        
+    def save_model(self, save_path='ensemble_model.pth'):
+        """
+        Save both Mask R-CNN and Random Forest models in a single file
+        
+        Args:
+            save_path (str): Path to save the combined model
+        """
+        # Create a state dictionary to save both models
+        model_state = {
+            'mask_rcnn_state': self.mask_rcnn.state_dict(),
+            'rf_model': self.rf
+        }
+        
+        # Save to a single file
+        torch.save(model_state, save_path)
+        print(f"Ensemble model saved to {save_path}")
+    
+    def load_model(self, load_path='ensemble_model.pth'):
+        """
+        Load both Mask R-CNN and Random Forest models from a single file
+        
+        Args:
+            load_path (str): Path to load the combined model
+        """
+        # Load the state dictionary
+        model_state = torch.load(load_path, map_location=self.device, weights_only=True)
+        
+        # Restore Mask R-CNN model
+        self.mask_rcnn.load_state_dict(model_state['mask_rcnn_state'])
+        self.mask_rcnn.to(self.device)
+        
+        # Restore Random Forest model
+        self.rf = model_state['rf_model']
+        
+        print(f"Ensemble model loaded from {load_path}")
+
+    def evaluate_metrics(self, data_loader):
+        """Evaluate the ensemble model with accuracy, precision, recall, F1 score, and confusion matrix"""
+        print("Evaluating the ensemble model...")
+
+        all_true_labels = []
+        all_rf_predictions = []
+
+        self.mask_rcnn.eval()
+        with torch.no_grad():
+            for images, targets in tqdm(data_loader):
+                # Extract true labels from targets
+                true_labels = [t['labels'][0].item() if len(t['labels']) > 0 else 0 for t in targets]
+                all_true_labels.extend(true_labels)
+
+                # Get Random Forest predictions
+                batch_features = self.extract_features(images)
+                rf_predictions = self.rf.predict(batch_features)
+                all_rf_predictions.extend(rf_predictions)
+
+        # Convert lists to arrays for metrics calculation
+        all_true_labels = np.array(all_true_labels)
+        all_rf_predictions = np.array(all_rf_predictions)
+
+        # Calculate metrics
+        accuracy = accuracy_score(all_true_labels, all_rf_predictions)
+        precision = precision_score(all_true_labels, all_rf_predictions, average='weighted')
+        recall = recall_score(all_true_labels, all_rf_predictions, average='weighted')
+        f1 = f1_score(all_true_labels, all_rf_predictions, average='weighted')
+        conf_matrix = confusion_matrix(all_true_labels, all_rf_predictions)
+
+        print(f"Testing Accuracy: {accuracy:.4f}")
+        print(f"Precision: {precision:.4f}")
+        print(f"Recall: {recall:.4f}")
+        print(f"F1 Score: {f1:.4f}")
+
+        # Plot confusion matrix
+        plt.figure(figsize=(10, 7))
+        sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", xticklabels=True, yticklabels=True)
+        plt.xlabel("Predicted Labels")
+        plt.ylabel("True Labels")
+        plt.title("Confusion Matrix for Random Forest Predictions")
+        plt.show()
 
 class MaskRCNNDataset(Dataset):
-    def __init__(self, json_file, img_dir, transform=None):
-
+    def __init__(self, json_file, img_dir, transform=None, split="train"):
         self.img_dir = img_dir
         self.transform = transform
+        self.split = split
         
         # Load the JSON annotation file
         with open(json_file) as f:
@@ -150,21 +236,31 @@ class MaskRCNNDataset(Dataset):
         
         for annotation in self.data['annotations']:
             self.annotations[annotation['image_id']].append(annotation)
-            
-        # Define default transforms
+        
+        # Get a list of all image_ids
+        all_image_ids = list(self.image_info.keys())
+        
+        # Split the data into train and test
+        train_ids, test_ids = train_test_split(all_image_ids, test_size=0.2, random_state=42)
+        
+        # Assign images to either the train or test set based on the split
+        if self.split == "train":
+            self.image_ids = train_ids
+        elif self.split == "test":
+            self.image_ids = test_ids
+        else:
+            raise ValueError("split must be 'train' or 'test'")
+        
+        # Default transform if none is provided
         if transform is None:
-            self.transform = T.Compose([
-                T.ToTensor(),
-                T.Normalize(mean=[0.485, 0.456, 0.406], 
-                           std=[0.229, 0.224, 0.225])
-            ])
+            self.transform = T.Compose([T.ToTensor(), T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
     def __len__(self):
-        return len(self.data['images'])
+        return len(self.image_ids)
 
     def __getitem__(self, idx):
-        # Get the image info
-        image_info = self.image_info[idx + 1]
+        image_id = self.image_ids[idx]
+        image_info = self.image_info[image_id]
         image_path = os.path.join(self.img_dir, image_info['file_name'])
         
         # Load the image
@@ -174,7 +270,7 @@ class MaskRCNNDataset(Dataset):
         # Prepare targets
         masks, boxes, labels, areas = [], [], [], []
         
-        for annotation in self.annotations[idx + 1]:
+        for annotation in self.annotations[image_id]:
             if len(annotation['segmentation']) == 0:
                 continue
                 
@@ -208,7 +304,7 @@ class MaskRCNNDataset(Dataset):
             'boxes': boxes,
             'labels': labels,
             'masks': masks,
-            'image_id': torch.tensor([idx + 1]),
+            'image_id': torch.tensor([image_id]),
             'area': areas
         }
 
@@ -221,40 +317,42 @@ if __name__ == "__main__":
     # Dataset parameters
     json_file = 'annotations_in_coco.json'
     img_dir = 'SolDef_AI/Labeled'
-    batch_size = 2
-    num_workers = 4
+    batch_size = 8
+    num_workers = 8
     
-    # Create dataset and data loader
-    dataset = MaskRCNNDataset(json_file=json_file, img_dir=img_dir)
-    data_loader = torch.utils.data.DataLoader(
-        dataset,
+    # Create dataset for training and testing
+    train_dataset = MaskRCNNDataset(json_file=json_file, img_dir=img_dir, split="train")
+    test_dataset = MaskRCNNDataset(json_file=json_file, img_dir=img_dir, split="test")
+    
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
         collate_fn=collate_fn
     )
     
+    test_loader = torch.utils.data.DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        collate_fn=collate_fn
+    )
+    
     # Create and train ensemble model
-    ensemble = RFMaskRCNNEnsemble(n_estimators=100)
+    ensemble = RFMaskRCNNEnsemble(n_estimators=10)
     
     try:
         print("Training ensemble model...")
-        ensemble.train(data_loader)
+        ensemble.train(train_loader)
         
-        # Save the trained models
-        torch.save(ensemble.mask_rcnn.state_dict(), 'mask_rcnn_model.pth')
-        import joblib
-        joblib.dump(ensemble.rf, 'random_forest_model.joblib')
+        # Save the combined model
+        ensemble.save_model('ensemble_model.pth')
         print("Models saved successfully!")
         
-        # Test the ensemble
-        print("\nTesting ensemble model...")
-        test_image, test_target = next(iter(data_loader))
-        predictions = ensemble.predict(test_image[0])
-        
-        print("Test predictions:")
-        print(f"Number of Mask R-CNN detections: {len(predictions['mask_rcnn']['boxes'])}")
-        print(f"Random Forest class probabilities: {predictions['rf_probabilities']}")
+        # Evaluate the ensemble model on the test set
+        ensemble.evaluate_metrics(test_loader)
         
     except Exception as e:
         print(f"An error occurred: {str(e)}")

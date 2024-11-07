@@ -9,6 +9,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from torch.utils.data import Dataset
 import torchvision.transforms as T
+import seaborn as sns
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 class RFImageClassifier:
@@ -135,7 +137,19 @@ class RFImageClassifier:
         print("Confusion Matrix:")
         print(conf_matrix)
 
+        # Plot confusion matrix
+        class_names = ['good', 'no_good', 'exc_solder', 'poor_solder', 'spike']  # Replace with actual class names
+        self.plot_confusion_matrix(conf_matrix, class_names)
     
+    def plot_confusion_matrix(self, conf_matrix, class_names):
+        """Plot the confusion matrix using Seaborn"""
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=class_names, yticklabels=class_names)
+        plt.xlabel('Predicted Label')
+        plt.ylabel('True Label')
+        plt.title('Confusion Matrix')
+        plt.show()
+
     def predict(self, image, boxes=None):
         """Make predictions using Random Forest"""
         if hasattr(image, 'numpy'):
@@ -227,6 +241,14 @@ class ImageDataset(Dataset):
 def collate_fn(batch):
     return tuple(zip(*batch))
 
+def plot_confusion_matrix(conf_matrix, class_names):
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=class_names, yticklabels=class_names)
+    plt.xlabel('Predicted Label')
+    plt.ylabel('True Label')
+    plt.title('Confusion Matrix')
+    plt.show()
+
 if __name__ == "__main__":
     # Dataset parameters
     json_file = 'annotations_in_coco.json'
@@ -255,9 +277,6 @@ if __name__ == "__main__":
         joblib.dump(rf_classifier.rf, 'random_forest_classifier.joblib')
         print("Model saved successfully!")
         
-        # Test the model
-        #test_image, test_target = next(iter(data_loader))
-        #predictions = rf_classifier.predict(test_image[0], test_target[0]['boxes'])
         
     except Exception as e:
         print(f"An error occurred: {str(e)}")
