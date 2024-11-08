@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 import torch
 import torchvision.transforms as T
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader, random_split
 from pycocotools.mask import encode, decode
 from torchvision.models.detection import maskrcnn_resnet50_fpn
 from tqdm import tqdm
@@ -113,6 +113,36 @@ class MaskRCNNDataset(Dataset):
 
         return image, target
 
+def create_data_loaders(json_file, img_dir, batch_size, num_workers, train_split=0.8):
+    # Load full dataset
+    dataset = MaskRCNNDataset(json_file=json_file, img_dir=img_dir)
+
+    # Calculate exact number of samples for train and test sets
+    train_size = int(train_split * len(dataset))  # 80% of the dataset
+    test_size = len(dataset) - train_size         # 20% of the dataset
+
+    # Split dataset
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+
+    # Create data loaders
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        collate_fn=collate_fn
+    )
+    
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        collate_fn=collate_fn
+    )
+
+    return train_loader, test_loader
+
 def calculate_iou(pred_box, gt_box):
     """Calculate Intersection over Union (IoU) between two boxes."""
     xA = max(pred_box[0], gt_box[0])
@@ -129,7 +159,6 @@ def calculate_iou(pred_box, gt_box):
     return iou
 
 def evaluate_model(model, data_loader, device, iou_threshold=0.5):
-    """Evaluate the model on the dataset and calculate accuracy metrics."""
     model.eval()
     all_true_labels = []
     all_pred_labels = []
@@ -215,13 +244,12 @@ if __name__ == "__main__":
     # Create dataset
     dataset = MaskRCNNDataset(json_file=json_file, img_dir=img_dir)
     
-    # Create data loader
-    data_loader = torch.utils.data.DataLoader(
-        dataset,
+    # Create train and test loaders with an 80-20 split
+    train_loader, test_loader = create_data_loaders(
+        json_file=json_file,
+        img_dir=img_dir,
         batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-        collate_fn=collate_fn
+        num_workers=num_workers
     )
     
     # Create model
@@ -236,7 +264,7 @@ if __name__ == "__main__":
         model.train()
         for epoch in range(num_epochs):
             print(f"Epoch {epoch + 1}/{num_epochs}")
-            for images, targets in tqdm(data_loader, desc=f"Training Epoch {epoch + 1}"):
+            for images, targets in tqdm(train_loader, desc=f"Training Epoch {epoch + 1}"):
                 images = [image.to(device) for image in images]
                 targets = [{k: v.to(device) for k, v in target.items()} for target in targets]
                 
@@ -262,4 +290,4 @@ if __name__ == "__main__":
     
     # Evaluate the model
     print("Evaluating model...")
-    evaluate_model(model, data_loader, device)
+    evaluate_model(model, test_loader, device)

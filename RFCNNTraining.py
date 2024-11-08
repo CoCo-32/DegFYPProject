@@ -5,7 +5,6 @@ import cv2
 import torch
 import torchvision.transforms as T
 from torch.utils.data import Dataset
-from pycocotools.mask import encode, decode
 from torchvision.models.detection import maskrcnn_resnet50_fpn
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
@@ -20,7 +19,7 @@ class RFMaskRCNNEnsemble:
         self.mask_rcnn = maskrcnn_resnet50_fpn(weights='DEFAULT')
         self.mask_rcnn.to(self.device)
         self.rf = RandomForestClassifier(n_estimators=n_estimators)
-         # Takes layers from Mask R-CNN backbone except the last one for feature extraction
+        # Takes the feature extraction layers from Mask R-CNN backbone 
         self.feature_extractor = torch.nn.Sequential(*list(self.mask_rcnn.backbone.body.children())[:-1])
         
     def extract_features(self, images):
@@ -39,7 +38,6 @@ class RFMaskRCNNEnsemble:
         return np.array(features)
     
     def train(self, data_loader):
-        """Train both Mask R-CNN and Random Forest"""
         # First train Mask R-CNN
         self.train_mask_rcnn(data_loader)
         
@@ -55,7 +53,6 @@ class RFMaskRCNNEnsemble:
         #   - masks: Segmentation masks
         #   - image_id: Image identifiers
         #   - area: Area of masks
-        """Train Mask R-CNN"""
         self.mask_rcnn.train()
         optimizer = torch.optim.SGD(self.mask_rcnn.parameters(), lr=learning_rate, momentum=0.9)
         
@@ -86,8 +83,7 @@ class RFMaskRCNNEnsemble:
         # - images: To extract features through Mask R-CNN backbone
         # - targets: Only uses the first label from each target
         #   (labels[0] if exists, else 0)
-
-        """Train Random Forest using features from Mask R-CNN"""
+        
         print("Extracting features for Random Forest training...")
         features = []   # Features extracted from Mask R-CNN backbone
         labels = []     # Single label per image
@@ -121,7 +117,6 @@ class RFMaskRCNNEnsemble:
         print(f"Random Forest Validation Score: {rf_score:.4f}")
     
     def predict(self, image):
-        """Make predictions using both models"""
         self.mask_rcnn.eval()
         
         with torch.no_grad():
@@ -142,12 +137,6 @@ class RFMaskRCNNEnsemble:
             return combined_pred
         
     def save_model(self, save_path='ensemble_model.pth'):
-        """
-        Save both Mask R-CNN and Random Forest models in a single file
-        
-        Args:
-            save_path (str): Path to save the combined model
-        """
         # Create a state dictionary to save both models
         model_state = {
             'mask_rcnn_state': self.mask_rcnn.state_dict(),
@@ -159,12 +148,6 @@ class RFMaskRCNNEnsemble:
         print(f"Ensemble model saved to {save_path}")
     
     def load_model(self, load_path='ensemble_model.pth'):
-        """
-        Load both Mask R-CNN and Random Forest models from a single file
-        
-        Args:
-            load_path (str): Path to load the combined model
-        """
         # Load the state dictionary
         model_state = torch.load(load_path, map_location=self.device, weights_only=True)
         
@@ -178,7 +161,6 @@ class RFMaskRCNNEnsemble:
         print(f"Ensemble model loaded from {load_path}")
 
     def evaluate_metrics(self, data_loader):
-        """Evaluate the ensemble model with accuracy, precision, recall, F1 score, and confusion matrix"""
         print("Evaluating the ensemble model...")
 
         all_true_labels = []
@@ -207,18 +189,21 @@ class RFMaskRCNNEnsemble:
         f1 = f1_score(all_true_labels, all_rf_predictions, average='weighted')
         conf_matrix = confusion_matrix(all_true_labels, all_rf_predictions)
 
-        print(f"Testing Accuracy: {accuracy:.4f}")
+        conf_matrix_percent = conf_matrix / conf_matrix.sum(axis=1, keepdims=True)
+
+        print(f"Accuracy: {accuracy:.4f}")
         print(f"Precision: {precision:.4f}")
         print(f"Recall: {recall:.4f}")
         print(f"F1 Score: {f1:.4f}")
 
         # Plot confusion matrix
         plt.figure(figsize=(10, 7))
-        sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", xticklabels=True, yticklabels=True)
+        sns.heatmap(conf_matrix_percent, annot=True, fmt=".2f", cmap="Blues", xticklabels=True, yticklabels=True)
         plt.xlabel("Predicted Labels")
         plt.ylabel("True Labels")
-        plt.title("Confusion Matrix for Random Forest Predictions")
+        plt.title("Confusion Matrix for Ensemble Model (Percentage)")
         plt.show()
+
 
 class MaskRCNNDataset(Dataset):
     def __init__(self, json_file, img_dir, transform=None):

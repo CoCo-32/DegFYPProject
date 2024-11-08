@@ -94,7 +94,7 @@ class RFImageClassifier:
                 image_features = self.extract_features(image)
                 features.append(image_features)
                 
-                # Get label (assuming single label per image)
+                # Get label
                 if len(target['labels']) > 0:
                     labels.append(target['labels'][0].item())
                 else:
@@ -138,7 +138,7 @@ class RFImageClassifier:
         print(conf_matrix)
 
         # Plot confusion matrix
-        class_names = ['good', 'no_good', 'exc_solder', 'poor_solder', 'spike']  # Replace with actual class names
+        class_names = ['good', 'no_good', 'exc_solder', 'poor_solder', 'spike']  
         self.plot_confusion_matrix(conf_matrix, class_names)
     
     def plot_confusion_matrix(self, conf_matrix, class_names):
@@ -160,7 +160,7 @@ class RFImageClassifier:
         if boxes is not None:
             boxes = boxes.numpy() if hasattr(boxes, 'numpy') else boxes
             if len(boxes) > 0:
-                # Convert [x, y, w, h] to [x1, y1, x2, y2] if needed
+                # Convert [x, y, w, h] to [x1, y1, x2, y2] 
                 if boxes.shape[1] == 4:
                     boxes[:, 2] = boxes[:, 0] + boxes[:, 2]
                     boxes[:, 3] = boxes[:, 1] + boxes[:, 3]
@@ -177,7 +177,7 @@ class RFImageClassifier:
             'class_probabilities': pred_proba
         }
 
-# The ImageDataset class remains the same as in the previous code
+
 class ImageDataset(Dataset):
     def __init__(self, json_file, img_dir, transform=None):
         self.img_dir = img_dir
@@ -253,7 +253,7 @@ if __name__ == "__main__":
     # Dataset parameters
     json_file = 'annotations_in_coco.json'
     img_dir = 'SolDef_AI/Labeled'
-    batch_size = 16
+    batch_size = 8
     num_workers = 4
     
     # Create dataset and data loader
@@ -267,7 +267,7 @@ if __name__ == "__main__":
     )
     
     # Create and train Random Forest model
-    rf_classifier = RFImageClassifier(n_estimators=5)
+    rf_classifier = RFImageClassifier(n_estimators=10)
     
     try:
         print("Training Random Forest model...")

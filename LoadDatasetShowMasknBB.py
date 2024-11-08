@@ -82,13 +82,12 @@ class MaskRCNNDataset(Dataset):
             'image_id': idx + 1
         }
 
-# Example of how to use the dataset
 if __name__ == "__main__":
     json_file = 'annotations_in_coco.json'
     img_dir = 'SolDef_AI/Labeled'
     dataset = MaskRCNNDataset(json_file=json_file, img_dir=img_dir)
     
-    # Load the sample from the dataset (replace `dataset` and `0` with your actual dataset and index)
+    # Load the sample from the dataset 
     sample = dataset[0]
     image = sample['image']
     masks = sample['masks']
